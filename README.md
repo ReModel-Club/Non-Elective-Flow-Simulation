@@ -27,6 +27,13 @@ Note: Only simulated data are shared in this repository
 * **docs** This folder contains quarto documents which describe how the model handles length of stay and reneging behaviours, and also some quarto documents which describe model findings (results). Some of these documents use real system data so if running in an external organisation you will need to change the data source.
 * **environment** This folder contains a .yml for recreating a conda environment and also requirements.in / requirements.txt files for using venv or other package managers. There is also another requirements.txt file in the app folder which is required for deployment on Streamlit Community cloud. For notes on use of environment files see [here](https://github.com/Countess-of-Chester-Hospital-NHS-FT/Python-Environment-Notes)
 
+### Running the model
+
+* **Codespaces** This repository can be opened in [GitHub Codespaces](https://github.com/features/codespaces) which allows you to run the model and the app in a cloud container without having to have python installed locally or manage the environment. When the codespace is created you can run the app using `streamlit run app/launch.py` in the terminal. You may see a pop up with `Your application is running on Port ...' click open in browser to view and explore the app. If this pop up does not show then go to PORTS (next to terminal) and click open browser.
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=648726487)
+* **Locally** Clone the repository and configure the environment. Run the app using `streamlit run app/launch.py` in the terminal.
+
 ### Contributing
 Contributions and identification of issues are welcomed. Feel free to raise an issue or post discussions.
 
