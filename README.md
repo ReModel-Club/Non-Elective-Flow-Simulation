@@ -32,7 +32,7 @@ Note for ReModel participants: If it is your first time reproducing a model we r
 
 * **Codespaces** This repository can be opened in [GitHub Codespaces](https://github.com/features/codespaces) which allows you to run the model and the app in a cloud container without having to have python installed locally or manage the environment. The Codespace will open with the environment active you can see the environment using `pip list`. When the codespace is created you can run the app using `streamlit run app/launch.py` in the terminal. You may see a pop up with `Your application is running on Port ...' click open in browser to view and explore the app. If this pop up does not show then go to PORTS (next to terminal) and click open browser.
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=648726487)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)]([https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=648726487](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=ReModel-Club/Non-Elective-Flow-Simulation))
 * **Locally** Clone the repository and configure the environment. Run the app using `streamlit run app/launch.py` in the terminal.
 
 
