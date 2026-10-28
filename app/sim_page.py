@@ -5,6 +5,8 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from animation import animate
+from process_map import make_dfgs
+from trial_plots import PLOTS, DEVELOPER_PLOTS, make_trial_plot
 
 from model import g, Trial
 
@@ -19,8 +21,12 @@ if 'session_results' not in st.session_state:
     st.session_state['session_results'] = []
 if 'session_inputs' not in st.session_state:
     st.session_state['session_inputs'] = []
-if 'animation' not in st.session_state:
-    st.session_state['animation'] = []
+if 'animation_cache' not in st.session_state:
+    st.session_state['animation_cache'] = {} # animations already made for the latest scenario, by run
+if 'latest_event_logs' not in st.session_state:
+    st.session_state['latest_event_logs'] = None
+if 'latest_trial_logger' not in st.session_state:
+    st.session_state['latest_trial_logger'] = None
 
 st.title("Non-Elective Flow Virtual Hospital")
 st.header("(v0.0.0)")
@@ -151,7 +157,17 @@ g.prioritisation = (off_on.index(prioritisation_slider))
 g.prop_high_priority = prioritisation_prop_slider
 
 
-tab1, tab_animate, tab2 = st.tabs(["Run Virtual Hospital", "View Animation", "Compare scenarios"])
+with st.sidebar:
+    show_developer_tools = st.checkbox("Show developer tools",
+                                       value=False,
+                                       help="Select this to add an extra tab to the outputs for verifying the warm-up length and number of replications")
+
+tab_names = ["Run Virtual Hospital", "View Animation", "Process Map", "More Plots", "Compare scenarios"]
+if show_developer_tools:
+    tab_names.insert(4, "Developer Tools") # after More Plots
+tabs = st.tabs(tab_names)
+tab1, tab_animate, tab_dfg, tab_plots = tabs[:4]
+tab2 = tabs[-1]
 
 
 with tab1:
@@ -160,10 +176,13 @@ with tab1:
 
     if button_run_pressed:
         with st.spinner("Simulating the system"):
-            all_event_logs, patient_df, run_summary_df, trial_summary_df = Trial().run_trial()
-            
+            trial = Trial()
+            all_event_logs, patient_df, run_summary_df, trial_summary_df = trial.run_trial()
+
             # Adding to session state objects so we can compare scenarios
-            #st.session_state['event_logs'] = all_event_logs
+            st.session_state['latest_event_logs'] = all_event_logs
+            st.session_state['animation_cache'] = {}
+            st.session_state['latest_trial_logger'] = trial.trial_logger
             
             # Comparing inputs
             st.session_state.button_click_count += 1
@@ -278,33 +297,104 @@ with tab1:
             #     st.write("Waiting times cannot be plotted on a histogram as there are no significant waits for admission")
             # ###################
 
+# A fragment, so choosing a run reruns only the animation and not the whole page
+@st.fragment
+def view_animation():
+    if st.session_state['latest_event_logs'] is None:
+        st.write("Run the simulation to see the animation.")
+    else:
+        st.markdown("""
+                    Animation of a single run of the latest scenario, starting at the end of the
+                    warm-up period.
+
+                    If you are viewing on a small screen minimise the
+                    sidebar or download the plot.
+                    """)
+        animation_run = st.selectbox("Run to animate",
+                                     sorted(st.session_state['latest_event_logs']['run_number'].unique()))
+        with st.spinner("Generating animation"):
+            if animation_run not in st.session_state['animation_cache']:
+                st.session_state['animation_cache'][animation_run] = animate(st.session_state['latest_event_logs'], run=animation_run)
+            animation = st.session_state['animation_cache'][animation_run]
+
+        st.plotly_chart(animation,
+                        use_container_width=False,
+                        config = {'displayModeBar': False})
+
+        st.download_button(
+                label="Download Plot as HTML",
+                data=animation.to_html(full_html=False, include_plotlyjs="cdn"),
+                file_name=f"plot_run_{animation_run}.html",
+                mime="text/html"
+            )
+
 with tab_animate:
-    with st.spinner("Generating animation"):
+    view_animation()
 
-        if 'all_event_logs' in globals():
-            animation = animate(all_event_logs)
+# A fragment, so changing the process map options reruns only the map and not the whole page
+@st.fragment
+def process_map():
+    if st.session_state['latest_event_logs'] is None:
+        st.write("Run the simulation to see the process map.")
+    else:
+        st.markdown("""
+                    Process map (directly-follows graph) of the patient journey, combining
+                    all runs of the latest scenario (or a single run) once the warm-up period is discarded.
+                    Each box shows how many times a step happened. Each arrow shows how many
+                    patients went from one step to the next, the proportion of patients
+                    leaving the previous step that way and the time taken.
+                    """)
+        dfg_col1, dfg_col2, dfg_col3, dfg_col4 = st.columns(4)
+        split_by_route = dfg_col1.checkbox("Split by route of arrival (ED, SDEC, Other)")
+        split_by_renege = dfg_col1.checkbox("Split by whether patients reneged")
+        time_metric = dfg_col2.selectbox("Time shown on arrows", ["mean", "median", "min", "max"])
+        time_unit = dfg_col3.radio("Time units", ["hours", "minutes"], horizontal=True)
+        runs_shown = dfg_col4.radio("Runs shown", ["All runs", "Single run"], horizontal=True)
+        run = None
+        if runs_shown == "Single run":
+            run = dfg_col4.selectbox("Run",
+                                     sorted(st.session_state['latest_event_logs']['run_number'].unique()))
+        if split_by_renege and not (st.session_state['latest_event_logs']['event'] == "renege").any():
+            st.info("No patients reneged in this scenario (is reneging turned on?), "
+                    "so there are only maps for patients who did not renege.")
+        with st.spinner("Generating process map"):
+            for title, dfg in make_dfgs(st.session_state['latest_event_logs'],
+                                        split_by_route=split_by_route,
+                                        split_by_renege=split_by_renege,
+                                        time_metric=time_metric,
+                                        time_unit=time_unit,
+                                        run=run).items():
+                st.graphviz_chart(dfg)
 
-            st.session_state['animation'] = animation
+with tab_dfg:
+    process_map()
 
-        if st.session_state['animation']:
-            st.markdown("""
-                        Animation of a single run of the latest scenario.
+# A fragment, so choosing a plot reruns only this tab and not the whole page
+@st.fragment
+def more_plots(plots, key):
+    if st.session_state['latest_trial_logger'] is None:
+        st.write("Run the simulation to see more plots.")
+    else:
+        plot_name = st.selectbox("Plot", list(plots), key=key)
+        plot = plots[plot_name]
+        st.write(plot["description"])
+        if plot.get("warning"):
+            st.warning(plot["warning"])
+        with st.spinner("Generating plot"):
+            st.plotly_chart(make_trial_plot(st.session_state['latest_trial_logger'], plot_name),
+                            use_container_width=True)
+        if plot.get("explain"):
+            is_problem, explanation = plot["explain"](st.session_state['latest_trial_logger'])
+            with st.expander("How to interpret this", expanded=is_problem):
+                st.markdown(explanation)
 
-                        If you are viewing on a small screen minimise the 
-                        sidebar or download the plot.
-                        """)
-            st.plotly_chart(st.session_state['animation'],
-                                    use_container_width=False,
-                                    config = {'displayModeBar': False})
-            
-            st.download_button(
-                    label="Download Plot as HTML",
-                    data=st.session_state['animation'].to_html(full_html=False, include_plotlyjs="cdn"),
-                    file_name="plot.html",
-                    mime="text/html"
-                )
-            #st.dataframe(reshaped_logs)
-        
+with tab_plots:
+    more_plots(PLOTS, key="plot_choice")
+
+if show_developer_tools:
+    with tabs[4]:
+        more_plots(DEVELOPER_PLOTS, key="developer_plot_choice")
+
 with tab2:
     st.write(f"You've run {st.session_state.button_click_count} scenarios")
 
