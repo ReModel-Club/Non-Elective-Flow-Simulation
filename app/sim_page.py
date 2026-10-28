@@ -19,8 +19,12 @@ if 'session_results' not in st.session_state:
     st.session_state['session_results'] = []
 if 'session_inputs' not in st.session_state:
     st.session_state['session_inputs'] = []
-if 'animation' not in st.session_state:
-    st.session_state['animation'] = []
+if 'animation_cache' not in st.session_state:
+    st.session_state['animation_cache'] = {} # animations already made for the latest scenario, by run
+if 'latest_event_logs' not in st.session_state:
+    st.session_state['latest_event_logs'] = None
+if 'latest_trial_logger' not in st.session_state:
+    st.session_state['latest_trial_logger'] = None
 
 st.title("Non-Elective Flow Virtual Hospital")
 st.header("(v0.0.0)")
@@ -160,10 +164,13 @@ with tab1:
 
     if button_run_pressed:
         with st.spinner("Simulating the system"):
-            all_event_logs, patient_df, run_summary_df, trial_summary_df = Trial().run_trial()
-            
+            trial = Trial()
+            all_event_logs, patient_df, run_summary_df, trial_summary_df = trial.run_trial()
+
             # Adding to session state objects so we can compare scenarios
-            #st.session_state['event_logs'] = all_event_logs
+            st.session_state['latest_event_logs'] = all_event_logs
+            st.session_state['animation_cache'] = {}
+            st.session_state['latest_trial_logger'] = trial.trial_logger
             
             # Comparing inputs
             st.session_state.button_click_count += 1
@@ -278,33 +285,39 @@ with tab1:
             #     st.write("Waiting times cannot be plotted on a histogram as there are no significant waits for admission")
             # ###################
 
+# A fragment, so choosing a run reruns only the animation and not the whole page
+@st.fragment
+def view_animation():
+    if st.session_state['latest_event_logs'] is None:
+        st.write("Run the simulation to see the animation.")
+    else:
+        st.markdown("""
+                    Animation of a single run of the latest scenario, starting at the end of the
+                    warm-up period.
+
+                    If you are viewing on a small screen minimise the
+                    sidebar or download the plot.
+                    """)
+        animation_run = st.selectbox("Run to animate",
+                                     sorted(st.session_state['latest_event_logs']['run_number'].unique()))
+        with st.spinner("Generating animation"):
+            if animation_run not in st.session_state['animation_cache']:
+                st.session_state['animation_cache'][animation_run] = animate(st.session_state['latest_event_logs'], run=animation_run)
+            animation = st.session_state['animation_cache'][animation_run]
+
+        st.plotly_chart(animation,
+                        use_container_width=False,
+                        config = {'displayModeBar': False})
+
+        st.download_button(
+                label="Download Plot as HTML",
+                data=animation.to_html(full_html=False, include_plotlyjs="cdn"),
+                file_name=f"plot_run_{animation_run}.html",
+                mime="text/html"
+            )
+
 with tab_animate:
-    with st.spinner("Generating animation"):
-
-        if 'all_event_logs' in globals():
-            animation = animate(all_event_logs)
-
-            st.session_state['animation'] = animation
-
-        if st.session_state['animation']:
-            st.markdown("""
-                        Animation of a single run of the latest scenario.
-
-                        If you are viewing on a small screen minimise the 
-                        sidebar or download the plot.
-                        """)
-            st.plotly_chart(st.session_state['animation'],
-                                    use_container_width=False,
-                                    config = {'displayModeBar': False})
-            
-            st.download_button(
-                    label="Download Plot as HTML",
-                    data=st.session_state['animation'].to_html(full_html=False, include_plotlyjs="cdn"),
-                    file_name="plot.html",
-                    mime="text/html"
-                )
-            #st.dataframe(reshaped_logs)
-        
+    view_animation()
 with tab2:
     st.write(f"You've run {st.session_state.button_click_count} scenarios")
 
